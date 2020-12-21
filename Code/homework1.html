@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+
+body {
+    background-color: #3a4e6e;
+    color: white;
+}
+
+button {
+    background-color: #d3d3d3;
+    color: #000000;
+    padding: 8px 16px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    border: 2px solid #67c371;
+    margin: 4px 2px;
+    cursor: pointer;
+}
+
+
+button:hover {
+    background-color: #67c371;
+    color: white;
+}
+
+label{
+    color: #67c371;
+}
+
+
+.canvascontainer{
+
+    width: 50%;
+    float: left;
+}
+
+.container {
+    width: 25%;
+    float: left;
+}
+
+.newcontainer {
+    width: 25%;
+    float: right;
+}
+
+
+.slider {
+    -webkit-appearance: none;
+    width: 55%;
+    height: 10px;
+    background: #d3d3d3;
+    outline: none;
+    opacity: 0.7;
+
+}
+
+.slider:hover {
+    background-color: #67c371;
+}
+
+
+
+</style>
+</head>
+
+
+
+<script id="vertex-shader" type="x-shader/x-vertex">
+#version 300 es
+
+in  vec4 aPosition;
+in vec4 aNormal;
+in vec2 vTexCoord;
+
+out vec3 N, E;
+out vec2 fTexCoord;
+out vec3 pos;
+
+uniform mat4 uModelViewMatrix;
+uniform mat4 uProjectionMatrix;
+
+uniform mat3 uNormalMatrix;
+
+void main()
+{
+    fTexCoord = vTexCoord;
+    pos = (uModelViewMatrix * aPosition).xyz;
+
+    E =  normalize(-pos);
+    N = normalize(uNormalMatrix*aNormal.xyz);
+
+    gl_Position = uProjectionMatrix*uModelViewMatrix*aPosition;
+
+}
+</script>
+
+
+<script id="fragment-shader" type="x-shader/x-fragment">
+#version 300 es
+
+precision mediump float;
+
+uniform vec4 uLightPositionspot;
+uniform vec4 uLightPositiondirection;
+uniform vec4 uDirection;
+
+uniform vec4 uAmbientProductspot;
+uniform vec4 uDiffuseProductspot;
+
+uniform vec4 uAmbientProductdir;
+uniform vec4 uDiffuseProductdir;
+
+uniform sampler2D Tex0;
+
+uniform vec4 uglobalambient;
+
+uniform float flag; //flag spotlight
+uniform float flagtwo;  //flag direction light
+uniform float flagtexture; //flag texture
+
+//uniform float uShininess; USELESS USING THE REQUEST TOON SHADING MODEL
+uniform float ulimit; //CUTOFF
+
+in vec3 N, E;
+in vec3 pos;
+in vec2 fTexCoord;
+
+vec3 L, dirL, D;
+out vec4 fColor;
+
+void main(){
+
+  L = normalize( uLightPositionspot.xyz - pos); //SPOTLIGHT
+  dirL = normalize (uLightPositiondirection.xyz); //DIRECTION
+
+  D = normalize(uDirection.xyz);
+
+  //directionallighting
+  vec4 ambient = uAmbientProductdir;
+  vec4  diffuse = uDiffuseProductdir;
+  float dis = max( dot(dirL, N), 0.0 );  //COEFFICIENT FOR THE SHADING MODEL FOR THE DIRECTION LIGHT
+
+  //spotlight lighting
+  vec4 spotambient = uAmbientProductspot;
+  vec4  spotdiffuse = uDiffuseProductspot;
+  float spotdis = max( dot(L, N), 0.0 ); //COEFFICIENT FOR THE SHADING MODEL FOR THE SPOTLIGHT
+  float variable = dot(normalize(D), normalize((L+E)));  //VARIABLE TO CONTROL THE CUTOFF    L+E = back to uLightPosition
+
+  vec4 totalambient;
+  vec4 totaldiffuse;
+
+  if(variable > ulimit){
+    if (flag == 0.0 && flagtwo == 0.0){ //NO LIGHT
+      totalambient = vec4(0.0, 0.0,0.0,1.0);
+      totaldiffuse = vec4(0.0, 0.0,0.0,1.0);
+    }
+
+    else if(flag == 1.0 && flagtwo == 0.0){ //ONLY SPOTLIGHT
+      if(spotdis >= 0.5){
+        //Ci without ag x am
+        totalambient = spotambient;
+        totaldiffuse = spotdiffuse; }
+      else{
+        //Cs without ag x am
+        totalambient = spotambient;
+        totaldiffuse = vec4(0.0, 0.0,0.0,1.0);
+      }
+
+    }
+
+    else if(flag == 0.0 && flagtwo == 1.0){ //ONLY DIRECTIONAL LIGHT
+
+        //Cs without ag x am
+        if(dis >= 0.5){
+          //Ci without ag x am
+          totalambient = ambient;
+          totaldiffuse = diffuse;
+       }
+        else{
+          //Cs without ag x am
+          totalambient = ambient;
+          totaldiffuse = vec4(0.0, 0.0,0.0,1.0);
+        }
+
+    }
+
+    else{ //ALL LIGHTS OPEN
+      //Cs without ag x am
+      if(dis >= 0.5){
+        //Ci without ag x am
+        totalambient = ambient;
+        totaldiffuse = diffuse;
+     }
+      else{
+        //Cs without ag x am
+        totalambient = ambient;
+        totaldiffuse = vec4(0.0, 0.0,0.0,1.0);
+      }
+
+      if(spotdis >= 0.5){
+        //Ci without ag x am
+        totalambient += spotambient;
+        totaldiffuse += spotdiffuse; }
+      else{
+        //Cs without ag x am
+        totalambient += spotambient;
+        totaldiffuse += vec4(0.0, 0.0,0.0,1.0);
+      }
+
+
+    }
+
+    if(flagtexture == 1.0){
+
+      fColor = (uglobalambient + totalambient + totaldiffuse)*(texture(Tex0, fTexCoord));  //Final light with the sum of global_ambient(ag x am) and the texture
+      fColor.a = 1.0;
+    }
+
+    else{
+      fColor = uglobalambient + (totalambient + totaldiffuse); //Final light with the sum of global_ambient(ag x am)
+      fColor.a = 1.0;
+
+    }
+        //fColor = vColor;
+      }
+
+
+
+  else{ //Else variable < limit =  No SPOTLIGHT
+
+    if(flagtwo == 0.0){  //DIRECTIONAL LIGHT OFF
+      totalambient = vec4(0.0, 0.0,0.0,1.0);
+      totaldiffuse = vec4(0.0, 0.0,0.0,1.0);
+
+    }
+
+    else{  //DIRECTIONAL LIGHT ON
+      if(dis >= 0.5){
+        //Ci without ag x am
+        totalambient = ambient;
+        totaldiffuse = diffuse;
+     }
+      else{
+        //Cs without ag x am
+        totalambient = ambient;
+        totaldiffuse = vec4(0.0, 0.0,0.0,1.0);
+      }
+
+    }
+
+    if(flagtexture == 1.0){
+
+      fColor = (uglobalambient + totalambient + totaldiffuse)*(texture(Tex0, fTexCoord));
+      fColor.a = 1.0;
+    }
+
+    else{
+      fColor = (uglobalambient + totalambient + totaldiffuse);
+      fColor.a = 1.0;
+
+    }
+
+  }
+
+}
+</script>
+
+<script type="text/javascript" src="../Common/initShaders.js"></script>
+<script type="text/javascript" src="../Common/MVnew.js"></script>
+<script type="text/javascript" src="Homework1.js"></script>
+
+<body>
+
+<div class="container">
+  <button id = "Button1">Increase Z</button>
+  <button id = "Button2">Decrease Z</button>
+  <p> </p>
+  <p>Change Radius: <label  id="labelRadius">Starting Point</label></p>
+  <input id="RadiusSlider" class = "slider" type="range" min="0" max="50" step="0.5" value="5" />
+
+  <p>Change Theta: <label  id="labelTheta">Starting Point</label></p>
+  <input id="thetaSlider" class = "slider" type="range" min="-240" max="240" step="2" value="60" />
+  <p>Change Phi: <label  id="labelPhi">Starting Point</label></p>
+  <input id="phiSlider" class = "slider" type="range" min="-180" max="180" step="2" value="56" />
+  <br><p> </p>
+  <p>Turn On/Off Texture:
+  <button id = "textureonoff">Turn Off</button></p>
+  <br><p> </p>
+
+</div>
+
+
+<div class="canvascontainer">
+<canvas  id="gl-canvas" width="512" height="512">
+Oops ... your browser doesn't support the HTML5 canvas element
+</canvas>
+
+<img id = "Image1" src = "Texture.jpg" hidden></img>
+
+</div>
+
+
+<div class="newcontainer">
+  <p>Turn On/Off SpotLight:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+  <button id = "spotlightonoff">Turn Off</button></p>
+  <p>Turn On/Off Direction Light:
+  <button id = "directiononoff">Turn Off</button></p>
+
+  <p>Change Limit SpotLight:</p>
+    <input id="limit" class = "slider" type="range" min="0.9510" max="1.0001" step="0.0001" value="0.9949" />
+    <p></p>
+
+  <p>Change Direction SpotLight:</p>
+  <label  id="labelspotx">Coordinate x:</label>    <input id="spotX" class = "slider" type="range" min="-5" max="4" step="0.1" value="0" /><p></p>
+  <label  id="labelspoty">Coordinate y:</label>    <input id="spotY" class = "slider" type="range" min="-5" max="4" step="0.1" value="0" /><p></p>
+  <label  id="labelspotz">Coordinate z:</label>    <input id="spotZ" class = "slider" type="range" min="0" max="20" step="0.1" value="12" /><p></p>
+  <p></p></p><br>
+
+  <p>Change Position Direction Light:</p>
+  <label  id="labeldirx">Coordinate x:</label>    <input id="dirX" class = "slider" type="range" min="-8" max="8" step="1" value="1" /><p></p>
+  <label  id="labeldiry">Coordinate y:</label>    <input id="dirY" class = "slider" type="range" min="-8" max="8" step="1" value="0" /><p></p>
+  <label  id="labeldirz">Coordinate z:</label>    <input id="dirZ" class = "slider" type="range" min="0" max="4" step="1" value="2" /><p></p>
+
+    <p></p></p><br>
+
+</div>
+
+</body>
+</html>
